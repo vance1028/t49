@@ -8,6 +8,10 @@ const plansRouter = require('./routes/plans');
 const enrollmentsRouter = require('./routes/enrollments');
 const menusRouter = require('./routes/menus');
 const attendancesRouter = require('./routes/attendances');
+const authRouter = require('./routes/auth');
+const bindingsRouter = require('./routes/bindings');
+const accountsRouter = require('./routes/accounts');
+const rolesRouter = require('./routes/roles');
 const { sendError } = require('./utils/http');
 
 /**
@@ -26,11 +30,18 @@ function createApp() {
     });
   });
 
+  // 公开接口：登录
+  app.use('/api/auth', authRouter);
+
+  // 需要鉴权的业务接口
   app.use('/api/students', studentsRouter);
   app.use('/api/plans', plansRouter);
   app.use('/api/enrollments', enrollmentsRouter);
   app.use('/api/menus', menusRouter);
   app.use('/api/attendances', attendancesRouter);
+  app.use('/api/bindings', bindingsRouter);
+  app.use('/api/accounts', accountsRouter);
+  app.use('/api/admin', rolesRouter);
 
   app.use((req, res) => sendError(res, 404, '接口不存在'));
 

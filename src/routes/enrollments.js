@@ -3,36 +3,40 @@
 const express = require('express');
 const store = require('../data/store');
 const { sendError, toPositiveInt, isValidDate } = require('../utils/http');
+const { requireAuth, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-router.get('/', wrap(async (req, res) => {
+router.get('/', requireAuth(), requirePermission('enrollment:list'), wrap(async (req, res) => {
   const filters = {};
   if (req.query.studentId !== undefined) {
     const sid = toPositiveInt(req.query.studentId);
     if (sid === null) return sendError(res, 400, '无效的学生 ID');
     filters.studentId = sid;
   }
-  const list = await store.listEnrollments(filters);
+  const list = await store.listEnrollments(filters, req.auth);
   res.json({ data: list, total: list.length });
 }));
 
-router.get('/:id', wrap(async (req, res) => {
+router.get('/:id', requireAuth(), requirePermission('enrollment:read'), wrap(async (req, res) => {
   const id = toPositiveInt(req.params.id);
   if (id === null) return sendError(res, 400, '无效的报名 ID');
-  const e = await store.getEnrollment(id);
-  if (!e) return sendError(res, 404, '报名记录不存在');
+  const e = await store.getEnrollment(id, req.auth);
+  if (!e) return sendError(res, 404, '报名记录不存在或无权查看');
   res.json({ data: e });
 }));
 
-// 学生报名订餐：校验学生、套餐存在，日期合法，金额取套餐价格
-router.post('/', wrap(async (req, res) => {
+router.post('/', requireAuth(), requirePermission('enrollment:create'), wrap(async (req, res) => {
   const b = req.body || {};
   const sid = toPositiveInt(b.studentId);
   const pid = toPositiveInt(b.planId);
   if (sid === null) return sendError(res, 400, '必须指定有效的学生 ID');
   if (pid === null) return sendError(res, 400, '必须指定有效的套餐 ID');
+
+  if (req.auth.roleCode !== 'ADMIN' && !req.auth.visibleStudentIds.has(sid)) {
+    return sendError(res, 403, '无权为该学生办理报名');
+  }
 
   const student = await store.getStudent(sid);
   if (!student) return sendError(res, 400, '学生不存在');
@@ -61,12 +65,11 @@ router.post('/', wrap(async (req, res) => {
   res.status(201).json({ data: e });
 }));
 
-// 标记缴费
-router.post('/:id/pay', wrap(async (req, res) => {
+router.post('/:id/pay', requireAuth(), requirePermission('enrollment:pay'), wrap(async (req, res) => {
   const id = toPositiveInt(req.params.id);
   if (id === null) return sendError(res, 400, '无效的报名 ID');
-  const e = await store.getEnrollment(id);
-  if (!e) return sendError(res, 404, '报名记录不存在');
+  const e = await store.getEnrollment(id, req.auth);
+  if (!e) return sendError(res, 404, '报名记录不存在或无权查看');
   if (e.paid) return sendError(res, 409, '该报名已缴费');
   const updated = await store.markEnrollmentPaid(id);
   res.json({ data: updated });
